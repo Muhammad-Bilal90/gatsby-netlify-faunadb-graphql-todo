@@ -11,7 +11,7 @@ const faunadb = require("faunadb"),
 
 const typeDefs = gql`
   type Query {
-    todos: [Todo]!
+    todos: [Todo!]
   }
   type Todo{
       id: ID!
@@ -20,7 +20,7 @@ const typeDefs = gql`
   }
   type Mutation{
       addTodo(value: String!):Todo
-      updateTodoDone(id: ID!): Todo
+      updateTodoDone(id: ID!, done: Boolean!): Todo
   }
 `;
 
@@ -34,16 +34,20 @@ const resolvers = {
 
         try{
         
-        const results = await client.query(
-          q.Paginate(q.Match(q.Index("filter_todos_owner"), user))
-      )
-
-      return results.data.map(([ref,value,done])=>({
-        id: ref.id,
-        value,
-        done
-      }))
-
+          const result = await client.query(
+            q.Map(
+                q.Paginate(q.Documents(q.Collection('todos'))),
+                q.Lambda('todo', q.Get(q.Var('todo')))
+            )
+        )
+        
+        return result.data.map(dt => (
+            {
+                id: dt.ref.id,
+                value: dt.data.value,
+                done: dt.data.done
+            }
+        ))
     }
     catch(e){
 
@@ -82,7 +86,7 @@ const resolvers = {
         }
         )
       },
-      updateTodoDone: async (_,{id}, {user})=>{
+      updateTodoDone: async (_,{id, done}, {user})=>{
 
         if (!user){
           throw new Error ("Must be authenticated to update todos")
@@ -92,7 +96,7 @@ const resolvers = {
           q.Update(q.Ref(q.Collection("todos"),id),
           {
           data:{
-              done:true
+              done:done
           }
       }
           )
